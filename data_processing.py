@@ -7,7 +7,61 @@ import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
+def data_post_processing(dataset_df, dataset_path):
+    # logs
+    logging.info(f"Data Post-Processing Started for file {dataset_path}")
+
+    # necessary columns check
+    required_columns = {"sensor_id", "location", "latitude", "longitude", "timestamp", "pressure", "temperature", "humidity"}
+    if not required_columns.issubset(dataset_df.columns):
+        raise ValueError(f"Dataset must contain the following columns: {required_columns}")
+
+    # group by sensor_id
+    grouped_analysis_df = dataset_df.groupby(["sensor_id", "location", "latitude", "longitude"]).agg(
+        min_pressure=("pressure", "min"),
+        max_pressure=("pressure", "max"),
+        avg_pressure=("pressure", "mean"),
+        std_pressure=("pressure", "std"),
+        min_temperature=("temperature", "min"),
+        max_temperature=("temperature", "max"),
+        avg_temperature=("temperature", "mean"),
+        std_temperature=("temperature", "std"),
+        min_humidity=("humidity", "min"),
+        max_humidity=("humidity", "max"),
+        avg_humidity=("humidity", "mean"),
+        std_humidity=("humidity", "std"),
+    ).reset_index()
+
+    # fn to get metadata
+    def collect_metadata(group):
+        source_metadata = [
+            {
+                "timestamp": row["timestamp"],
+                "pressure": row["pressure"],
+                "temperature": row["temperature"],
+                "humidity": row["humidity"],
+            }
+            for _, row in group.iterrows()
+        ]
+        return {"source": source_metadata, "file": dataset_path}
+
+    metadata_df = (
+        dataset_df.groupby("sensor_id")
+        .apply(collect_metadata)
+        .reset_index(name="metadata")
+    )
+    
+    combined_df = pandas.merge(grouped_analysis_df, metadata_df, on="sensor_id")
+    print(combined_df.head())
+    # logs
+    logging.info(f"Data Post-Processing Completed for file {dataset_path}")
+
+    return combined_df
+
 def data_standardisation(dataset_df):
+    # logs
+    logging.info("Data Standardisation Started")
+
     float_columns = dataset_df.select_dtypes(include=['float64']).columns
     # round to 3 decimal places
     dataset_df[float_columns] = dataset_df[float_columns].round(3)
@@ -78,3 +132,6 @@ def data_pre_processing(dataset_path):
     elapsed_time = end_time - start_time
     logging.info(f"Pre-Processing Completed for file {dataset_path}")
     logging.info(f"Total time taken for pre-processing : {elapsed_time:.2f} seconds")
+
+    # data analysis
+    data_post_processing(valid_data_df, dataset_path)
