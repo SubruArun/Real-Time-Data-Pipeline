@@ -1,60 +1,46 @@
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-import time
-import logging
+import polling2
 import os
-from pathlib import Path
-from queue import Queue
-from threading import Thread
-
+import logging
 from tenacity import retry, stop_after_attempt, wait_fixed
+
 from data_processing import data_pre_processing
 
 
-class FileHandler(FileSystemEventHandler):
-    def __init__(self, file_queue):
-        self.file_queue = file_queue  # queue to hold file path
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    def on_created(self, event):
-        if event.src_path.endswith('.csv'):
-            try:
-                dataset_path = os.path.normpath(event.src_path)
-                print(f"New file found & added to queue - {dataset_path}")
-                self.file_queue.put(dataset_path)
-            except Exception as e:
-                logging.error(f"Error processing file {dataset_path}: {e}")
 
-def process_files(file_queue):
-    while True:
-        dataset_path = file_queue.get()
-        if dataset_path:
-            try:
-                data_pre_processing(dataset_path=dataset_path)
-            except Exception as e:
-                logging.error(f"Error processing file {dataset_path}: {e}")
-            file_queue.task_done()
+def check_for_new_files(folder_path, known_files):
+    current_files = set(os.listdir(folder_path))
+    new_files = current_files - known_files
+    return new_files
 
 @retry(stop=stop_after_attempt(10), wait=wait_fixed(2))
 def start_observer():
-    file_queue = Queue()  # queue to hold files
-    observer = Observer()
-    observer.schedule(FileHandler(file_queue), path='.\data', recursive=False)
+    folder_path = './data/'
 
-    # # test retry
-    # raise Exception("error to trigger retry")
+    if not os.path.exists(folder_path):
+        logging.error(f"Folder {folder_path} does not exist | Retrying...")
+        raise Exception(f"Folder {folder_path} does not exist")
 
-    # file processing thread
-    processing_thread = Thread(target=process_files, args=(file_queue,))
-    processing_thread.daemon = True  # ensure processing thread stops when the main process stops
-    processing_thread.start()
+    known_files = set(os.listdir(folder_path))
+    logging.info(f"Found existing files : {known_files}")
 
-    # observing directory
-    observer.start()
-    logging.info("Observer started...")
-
-    # keeping alive
     while True:
-        time.sleep(1)
+        try:
+            new_files = polling2.poll(
+                lambda: check_for_new_files(folder_path, known_files),
+                step=5,  # Polling interval
+                poll_forever=True
+            )
+            if new_files:
+                logging.info(f"New files detected : {new_files}")
+                known_files.update(new_files)
+                for each_file in list(new_files):
+                    data_pre_processing(dataset_path=f"./data/{each_file}")
+        except Exception as e:
+            logging.error(f"Exception occured : {e} | Retrying... | Existing Files : {known_files}")
+            raise Exception(f"Exception occured : {e} | Retrying...")
 
 
 if __name__ == "__main__":

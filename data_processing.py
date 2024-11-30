@@ -1,6 +1,7 @@
 import pandas
 import logging
 import time
+from pathlib import Path
 
 
 # configure logging
@@ -103,8 +104,8 @@ def data_pre_processing(dataset_path):
     ''' DATA PRE-PROCESSING '''
     logging.info(f"Pre-Processing Started for file {dataset_path}")
     start_time = time.time()
-    dataset_df = pandas.read_csv(dataset_path).drop_duplicates()
-    # dataset_df = pandas.read_csv("air_quality_data_part_1.csv").drop_duplicates()
+    dataset_df = pandas.read_csv(str(Path(dataset_path).resolve(strict=False))).drop_duplicates()
+    # dataset_df = pandas.read_csv("./data/air_quality_data_part_4.csv").drop_duplicates()
     dataset_df = dataset_df.rename(columns={"lat": "latitude", "lon": "longitude"})
     dataset_df = dataset_df.loc[:, ~dataset_df.columns.str.contains('^Unnamed')]
     validation_check_dataset_df = dataset_df.apply(lambda row: data_validation_check(row), axis=1)

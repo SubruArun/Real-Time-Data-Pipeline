@@ -36,4 +36,18 @@ Design and implement a scalable real-time data pipeline that monitors a director
     - Implement a retry mechanism for failed operations, ensuring that no data is lost or ignored during outages or failures.
 
 
+## How to run
+### Pre-Requisites
+- run ```pip3 install requirements.txt```
+    > **NOTE:** installed python3 is expected to test this project
+- Download [PostgreSQL](https://www.postgresql.org/download/windows/) Database 
+    - 💡 **Optional:** [Database Visualizers](https://www.postgresql.org/ftp/pgadmin/pgadmin4/v8.13/windows/)
+- run `python3 db_connect_check.py`
+    - To validate if database is up and running
 
+### Trigger Mechanism
+- run ```python3 event_listener.py```
+    - To trigger the pipeline
+- Add any files from **sample_data** folder to **data** folder
+    - This will process the newly added files one by one
+    > ⚠️ **NOTE:** Currently its a synchronous process, need to by asynchronous in order to process faster
