@@ -8,11 +8,20 @@ from utils.db_schema import db_config
 from utils.log_config import log_info
 
 
+def fetch_historical_sensor_aggregated_metrics(sensor_ids):
+    db = Database(db_config)
+    try:
+        db.connect()
+        historical_df = db.fetch_sensor_aggregated_metrics(sensor_ids)
+    finally:
+        db.close()
+
+    return historical_df
+
 def data_post_processing(dataset_df, dataset_path):
     # logs
     log_info("info", f"Data Post-Processing Started for file {dataset_path}")
 
-    # necessary columns check
     required_columns = {"sensor_id", "location_id", "latitude", "longitude", "timestamp", "pressure", "temperature", "humidity"}
     if not required_columns.issubset(dataset_df.columns):
         raise ValueError(f"Dataset must contain the following columns: {required_columns}")
@@ -62,7 +71,41 @@ def data_post_processing(dataset_df, dataset_path):
     )
 
     combined_df = pandas.merge(grouped_analysis_df, metadata_df, on="sensor_id")
-    combined_df["last_updated"] = datetime.now()  # update current time/created time as timestamp
+    combined_df["last_updated"] = datetime.now()
+
+    # merge historical and current aggregated data
+    sensor_ids = combined_df["sensor_id"].unique().tolist()
+    historical_data = fetch_historical_sensor_aggregated_metrics(sensor_ids)
+    if historical_data:
+        historical_df = pandas.DataFrame(historical_data, columns=[
+            "sensor_id", "location_id", "latitude", "longitude",
+            "min_pressure", "max_pressure", "avg_pressure", "std_pressure",
+            "min_temperature", "max_temperature", "avg_temperature", "std_temperature",
+            "min_humidity", "max_humidity", "avg_humidity", "std_humidity"
+        ])
+
+        combined_df = pandas.concat([combined_df, historical_df])
+        combined_df = combined_df.groupby(["sensor_id", "location_id", "latitude", "longitude"]).agg(
+            min_pressure=("min_pressure", "min"),
+            max_pressure=("max_pressure", "max"),
+            avg_pressure=("avg_pressure", "mean"),
+            std_pressure=("std_pressure", "std"),
+            min_temperature=("min_temperature", "min"),
+            max_temperature=("max_temperature", "max"),
+            avg_temperature=("avg_temperature", "mean"),
+            std_temperature=("std_temperature", "std"),
+            min_humidity=("min_humidity", "min"),
+            max_humidity=("max_humidity", "max"),
+            avg_humidity=("avg_humidity", "mean"),
+            std_humidity=("std_humidity", "std"),
+        ).reset_index()
+
+        combined_df[rounded_columns] = combined_df[rounded_columns].round(3)
+
+        combined_df = pandas.merge(
+            combined_df, metadata_df, on="sensor_id", how="left"
+        )
+        combined_df["last_updated"] = datetime.now()
 
     # logs
     log_info("info", f"Data Post-Processing Completed for file {dataset_path}")
@@ -136,7 +179,6 @@ def data_pre_processing(dataset_path):
     valid_data_df = data_standardisation(valid_data_df)
 
     invalid_data_df.to_csv("./quarantine/invalid_air_quality_data_part_1.csv", index=False)
-    # valid_data_df.to_csv("./quarantine/valid_air_quality_data_part_1.csv", index=False)
 
     pre_processing_end_time = time.time()
     pre_processing_elapsed_time = pre_processing_end_time - pre_processing_start_time
@@ -145,8 +187,8 @@ def data_pre_processing(dataset_path):
     # data analysis
     aggregated_data = data_post_processing(valid_data_df, dataset_path)
 
-    db_write_start_time = time.time()
     # connect database and start write
+    db_write_start_time = time.time()
     log_info("info", f"Starting Database Write for {dataset_path}")
     db = Database(db_config)
     try:

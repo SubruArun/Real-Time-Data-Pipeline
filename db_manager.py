@@ -3,7 +3,8 @@ import psycopg2.extras
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from psycopg2 import OperationalError
 
-from utils.db_schema import query_create_sensor_raw_data, query_update_sensor_raw_data, query_create_sensor_aggregated_metrics, query_update_sensor_aggregated_metrics
+from utils.db_schema import query_create_sensor_raw_data, query_update_sensor_raw_data, query_create_sensor_aggregated_metrics, \
+    query_update_sensor_aggregated_metrics, query_fetch_sensor_aggregated_metrics
 from utils.log_config import log_info
 
 
@@ -111,8 +112,28 @@ class Database:
                         record['std_humidity'], metadata_json
                     ))
             self.connection.commit()
-            log_info("info", "Aggregated metrics inserted/updated successfully.")
+            log_info("info", "Sensor aggregated metrics inserted/updated successfully.")
         except Exception as e:
-            log_info("error", f"Failed to upsert aggregated metrics: {e}")
+            log_info("error", f"Failed to upsert sensor aggregated metrics: {e}")
             self.connection.rollback()
             raise
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(5),
+        retry=retry_if_exception_type(Exception),
+        reraise=True
+    )
+    def fetch_sensor_aggregated_metrics(self, sensor_ids):
+        try:
+            with self.connection.cursor() as cur:
+                cur.execute(query_fetch_sensor_aggregated_metrics, (sensor_ids,))
+                historical_data = cur.fetchall()
+            self.connection.commit()
+            log_info("info", "Sensor aggregated data retrieved successfully.")
+            return historical_data
+        except Exception as e:
+            log_info("error", f"Failed to fetch sensor aggregated metrics: {e}")
+            self.connection.rollback()
+            raise
+ 

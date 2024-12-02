@@ -40,16 +40,16 @@ Design and implement a scalable real-time data pipeline that monitors a director
 
 ## How to run
 ### Pre-Requisites
-- run ```pip3 install requirements.txt```
-    > **NOTE:** installed python3 is expected to test this project
+- Run ```pip3 install requirements.txt```
+    > **NOTE:** Installed python3 is expected to test this project
 - Download [PostgreSQL](https://www.postgresql.org/download) Database
-    - when installing database give password as **"postgres"** or if you are giving another password please update the **password** value in **db_config** in **utils/db_schema.py**
+    - When installing database give password as **"postgres"** or if you are giving another password please update the **password** value in **db_config** in **utils/db_schema.py** and **utils/db_connection_check.py**
     - 💡 **Optional:** [Database Visualizers](https://www.postgresql.org/ftp/pgadmin/pgadmin4/v8.13/)
-- run `python3 db_connect_check.py`
+- Run `python3 db_connect_check.py`
     - To validate if database is up and running
 
 ### Trigger Mechanism
-- run ```python3 event_listener.py```
+- Run ```python3 event_listener.py```
     - To trigger the pipeline
 - Add any files from **sample_data** folder to **data** folder
     - This will process the newly added files one by one
@@ -57,7 +57,6 @@ Design and implement a scalable real-time data pipeline that monitors a director
 
 
 ## Improvements/Noticed Bugs
-- In sensor_aggregated_metrics db the aggregation is done only for each files added, we are not merging the previously added values and new ones
 - Try async functions to process faster - but since csv read/write is there it wont be fully async
 - Database - Part of normalization keep seperate table for storing static data such as ["location", "latitude", "longitude"] into another table, so that we can reduce the size on raw data/aggregared metrics
 - Code revamp
@@ -66,12 +65,18 @@ Design and implement a scalable real-time data pipeline that monitors a director
 ## Future Works
 - Current total processing time is between 30-35 seconds for 70k rows, which can be reduced.
 - Use REDIS
-    - For logging and storing temporary data, as well as for keeping track of the processing state for each file. This ensures that if a file fails after preprocessing, we don't have to process it from the beginning. Redis can temporarily store the intermediate results (e.g., partially processed data or the state of each record) and allow us to resume the process from the last successful state during a retry. Also keeping track of kafka partition and index value to start process from failed states.
+    - For logging and storing temporary data, as well as for keeping track of the processing state for each file. This ensures that if a file fails after preprocessing, we don't have to process it from the beginning. Redis can temporarily store the intermediate results (e.g., partially processed data or the state of each record) and allow us to resume the process from the last successful state during a retry. Also if using kafka, to keep track of kafka partition and index value to start process from failed states.
 - Use KAFKA
     - Currently, the pipeline processes data sequentially, with dependencies between reading and processing steps. By incorporating Kafka, we can decouple these steps. The producer can continue to produce data (files), while the consumer processes them in parallel (either in a scheduled or real-time manner, depending on requirements). Retension period of 7 days will help keep track of data and re-process if required.
 - Use Spark
     - Can be utilized to handle large datasets in a distributed manner, taking advantage of its built-in features for parallel processing.
-
+- Use Elastic Engine
+    - Store logs - if we look for millions of files per hour, logs is also going to be high in such cases we cannot rely on redis as querying for logs will also be necessary (eg: query based on certain type of failure in logs, to check how many has failed in each type etc..)
+- Extras
+    - Grafana
+        - For visual representation of logs from elastic index 
+    - Containerization (kubernetes)
+        - Each component can be released as a docker container and together we can combine multiple components into a helm chart, this will help in cases where major updates on one component happens, only that needs to be changed in a distributed cloud environment (future scaling)  
 
 ## References
 - https://www.kaggle.com/search
