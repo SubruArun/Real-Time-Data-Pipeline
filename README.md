@@ -1,6 +1,8 @@
 # Real-Time-Data-Pipeline
 Design and implement a scalable real-time data pipeline that monitors a directory for incoming data, processes it based on specific criteria, and stores the transformed data in a relational database for further analysis.
 
+![architecture](utils/architecture_diagram.png)
+
 ## Task Description:
 - Data Ingestion & Monitoring:
     - The pipeline should continuously monitor a folder named “data” for incoming CSV files.
@@ -40,8 +42,9 @@ Design and implement a scalable real-time data pipeline that monitors a director
 ### Pre-Requisites
 - run ```pip3 install requirements.txt```
     > **NOTE:** installed python3 is expected to test this project
-- Download [PostgreSQL](https://www.postgresql.org/download/windows/) Database 
-    - 💡 **Optional:** [Database Visualizers](https://www.postgresql.org/ftp/pgadmin/pgadmin4/v8.13/windows/)
+- Download [PostgreSQL](https://www.postgresql.org/download) Database
+    - when installing database give password as **"postgres"** or if you are giving another password please update the **password** value in **db_config** in **utils/db_schema.py**
+    - 💡 **Optional:** [Database Visualizers](https://www.postgresql.org/ftp/pgadmin/pgadmin4/v8.13/)
 - run `python3 db_connect_check.py`
     - To validate if database is up and running
 
@@ -55,18 +58,19 @@ Design and implement a scalable real-time data pipeline that monitors a director
 
 ## Improvements/Noticed Bugs
 - In sensor_aggregated_metrics db the aggregation is done only for each files added, we are not merging the previously added values and new ones
-- Try async functions to process faster - but since csv read/write is there is wont be fully async
+- Try async functions to process faster - but since csv read/write is there it wont be fully async
+- Database - Part of normalization keep seperate table for storing static data such as ["location", "latitude", "longitude"] into another table, so that we can reduce the size on raw data/aggregared metrics
 - Code revamp
 
 
 ## Future Works
-- Current total processing time is between 30-35 seconds which can be reduced
+- Current total processing time is between 30-35 seconds for 70k rows, which can be reduced.
 - Use REDIS
-    - For logging and storing temporary data, as well as for keeping track of the processing state for each file. This ensures that if a file fails after preprocessing, we don't have to process it from the beginning. Redis can temporarily store the intermediate results (e.g., partially processed data or the state of each record) and allow us to resume the process from the last successful state during a retry
+    - For logging and storing temporary data, as well as for keeping track of the processing state for each file. This ensures that if a file fails after preprocessing, we don't have to process it from the beginning. Redis can temporarily store the intermediate results (e.g., partially processed data or the state of each record) and allow us to resume the process from the last successful state during a retry. Also keeping track of kafka partition and index value to start process from failed states.
 - Use KAFKA
-    - Currently, the pipeline processes data sequentially, with dependencies between reading and processing steps. By incorporating Kafka, we can decouple these steps. The producer can continue to produce data (files), while the consumer processes them in parallel (either in a scheduled or real-time manner, depending on requirements)
+    - Currently, the pipeline processes data sequentially, with dependencies between reading and processing steps. By incorporating Kafka, we can decouple these steps. The producer can continue to produce data (files), while the consumer processes them in parallel (either in a scheduled or real-time manner, depending on requirements). Retension period of 7 days will help keep track of data and re-process if required.
 - Use Spark
-    - Can be utilized to handle large datasets in a distributed manner, taking advantage of its built-in features for parallel processing
+    - Can be utilized to handle large datasets in a distributed manner, taking advantage of its built-in features for parallel processing.
 
 
 ## References

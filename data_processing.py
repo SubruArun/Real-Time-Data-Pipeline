@@ -63,7 +63,7 @@ def data_post_processing(dataset_df, dataset_path):
 
     combined_df = pandas.merge(grouped_analysis_df, metadata_df, on="sensor_id")
     combined_df["last_updated"] = datetime.now()  # update current time/created time as timestamp
-    print(combined_df.head())
+
     # logs
     log_info("info", f"Data Post-Processing Completed for file {dataset_path}")
 
