@@ -1,24 +1,24 @@
 import pandas
-import logging
 import time
+from datetime import datetime
 from pathlib import Path
 
-
-# configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from db_manager import Database
+from utils.db_schema import db_config
+from utils.log_config import log_info
 
 
 def data_post_processing(dataset_df, dataset_path):
     # logs
-    logging.info(f"Data Post-Processing Started for file {dataset_path}")
+    log_info("info", f"Data Post-Processing Started for file {dataset_path}")
 
     # necessary columns check
-    required_columns = {"sensor_id", "location", "latitude", "longitude", "timestamp", "pressure", "temperature", "humidity"}
+    required_columns = {"sensor_id", "location_id", "latitude", "longitude", "timestamp", "pressure", "temperature", "humidity"}
     if not required_columns.issubset(dataset_df.columns):
         raise ValueError(f"Dataset must contain the following columns: {required_columns}")
 
     # group by sensor_id
-    grouped_analysis_df = dataset_df.groupby(["sensor_id", "location", "latitude", "longitude"]).agg(
+    grouped_analysis_df = dataset_df.groupby(["sensor_id", "location_id", "latitude", "longitude"]).agg(
         min_pressure=("pressure", "min"),
         max_pressure=("pressure", "max"),
         avg_pressure=("pressure", "mean"),
@@ -33,6 +33,14 @@ def data_post_processing(dataset_df, dataset_path):
         std_humidity=("humidity", "std"),
     ).reset_index()
 
+    # round off to 3 decimal places - this is wrt to standardization
+    rounded_columns = [
+        'min_pressure', 'max_pressure', 'avg_pressure', 'std_pressure',
+        'min_temperature', 'max_temperature', 'avg_temperature', 'std_temperature',
+        'min_humidity', 'max_humidity', 'avg_humidity', 'std_humidity'
+    ]
+    grouped_analysis_df[rounded_columns] = grouped_analysis_df[rounded_columns].round(3)
+
     # fn to get metadata
     def collect_metadata(group):
         source_metadata = [
@@ -44,31 +52,33 @@ def data_post_processing(dataset_df, dataset_path):
             }
             for _, row in group.iterrows()
         ]
-        return {"source": source_metadata, "file": dataset_path}
+        # why like this - because in db each file can have a metadata kept seperately for further verifications if necessary
+        return {dataset_path: source_metadata}
 
     metadata_df = (
         dataset_df.groupby("sensor_id")
         .apply(collect_metadata)
         .reset_index(name="metadata")
     )
-    
+
     combined_df = pandas.merge(grouped_analysis_df, metadata_df, on="sensor_id")
+    combined_df["last_updated"] = datetime.now()  # update current time/created time as timestamp
     print(combined_df.head())
     # logs
-    logging.info(f"Data Post-Processing Completed for file {dataset_path}")
+    log_info("info", f"Data Post-Processing Completed for file {dataset_path}")
 
     return combined_df
 
 def data_standardisation(dataset_df):
     # logs
-    logging.info("Data Standardisation Started")
+    log_info("info", "Data Standardisation Started")
 
     float_columns = dataset_df.select_dtypes(include=['float64']).columns
     # round to 3 decimal places
     dataset_df[float_columns] = dataset_df[float_columns].round(3)
 
     # logs
-    logging.info("Data Standardisation Complete")
+    log_info("info", "Data Standardisation Complete")
     return dataset_df
 
 def data_validation_check(row):
@@ -102,11 +112,10 @@ def data_validation_check(row):
 
 def data_pre_processing(dataset_path):
     ''' DATA PRE-PROCESSING '''
-    logging.info(f"Pre-Processing Started for file {dataset_path}")
-    start_time = time.time()
+    log_info("info", f"Pre-Processing Started for file {dataset_path}")
+    pre_processing_start_time = time.time()
     dataset_df = pandas.read_csv(str(Path(dataset_path).resolve(strict=False))).drop_duplicates()
-    # dataset_df = pandas.read_csv("./data/air_quality_data_part_4.csv").drop_duplicates()
-    dataset_df = dataset_df.rename(columns={"lat": "latitude", "lon": "longitude"})
+    dataset_df = dataset_df.rename(columns={"lat": "latitude", "lon": "longitude", "location":"location_id"})
     dataset_df = dataset_df.loc[:, ~dataset_df.columns.str.contains('^Unnamed')]
     validation_check_dataset_df = dataset_df.apply(lambda row: data_validation_check(row), axis=1)
     dataset_df = pandas.concat([dataset_df, validation_check_dataset_df], axis=1)
@@ -115,7 +124,7 @@ def data_pre_processing(dataset_path):
     invalid_data_df = dataset_df[dataset_df['validity']==False]
 
     # logs
-    logging.info(
+    log_info("info", 
         "Data Validation Complete:\n"
         f"\t\t\t\t\t- Total rows in dataset: {len(dataset_df)}\n"
         f"\t\t\t\t\t- Valid rows: {len(valid_data_df)}\n"
@@ -127,12 +136,29 @@ def data_pre_processing(dataset_path):
     valid_data_df = data_standardisation(valid_data_df)
 
     invalid_data_df.to_csv("./quarantine/invalid_air_quality_data_part_1.csv", index=False)
-    valid_data_df.to_csv("./quarantine/valid_air_quality_data_part_1.csv", index=False)
+    # valid_data_df.to_csv("./quarantine/valid_air_quality_data_part_1.csv", index=False)
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    logging.info(f"Pre-Processing Completed for file {dataset_path}")
-    logging.info(f"Total time taken for pre-processing : {elapsed_time:.2f} seconds")
+    pre_processing_end_time = time.time()
+    pre_processing_elapsed_time = pre_processing_end_time - pre_processing_start_time
+    log_info("info", f"Pre-Processing Completed for file {dataset_path}")
 
     # data analysis
-    data_post_processing(valid_data_df, dataset_path)
+    aggregated_data = data_post_processing(valid_data_df, dataset_path)
+
+    db_write_start_time = time.time()
+    # connect database and start write
+    log_info("info", f"Starting Database Write for {dataset_path}")
+    db = Database(db_config)
+    try:
+        db.connect()
+        db.create_tables()
+        db.update_sensor_raw_data(valid_data_df)
+        db.update_sensor_aggregated_metrics(aggregated_data)
+    finally:
+        db.close()
+    log_info("info", f"Database Write Completed for {dataset_path}")
+    db_write_end_time = time.time()
+    db_write_elapsed_time = db_write_end_time - db_write_start_time
+
+    log_info("info", f"Total time taken for pre-processing : {pre_processing_elapsed_time:.2f} seconds")
+    log_info("info", f"Total time taken for database operations : {db_write_elapsed_time:.2f} seconds")

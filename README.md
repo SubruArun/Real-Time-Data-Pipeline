@@ -51,3 +51,25 @@ Design and implement a scalable real-time data pipeline that monitors a director
 - Add any files from **sample_data** folder to **data** folder
     - This will process the newly added files one by one
     > ⚠️ **NOTE:** Currently its a synchronous process, need to by asynchronous in order to process faster
+
+
+## Improvements/Noticed Bugs
+- In sensor_aggregated_metrics db the aggregation is done only for each files added, we are not merging the previously added values and new ones
+- Try async functions to process faster - but since csv read/write is there is wont be fully async
+- Code revamp
+
+
+## Future Works
+- Current total processing time is between 30-35 seconds which can be reduced
+- Use REDIS
+    - For logging and storing temporary data, as well as for keeping track of the processing state for each file. This ensures that if a file fails after preprocessing, we don't have to process it from the beginning. Redis can temporarily store the intermediate results (e.g., partially processed data or the state of each record) and allow us to resume the process from the last successful state during a retry
+- Use KAFKA
+    - Currently, the pipeline processes data sequentially, with dependencies between reading and processing steps. By incorporating Kafka, we can decouple these steps. The producer can continue to produce data (files), while the consumer processes them in parallel (either in a scheduled or real-time manner, depending on requirements)
+- Use Spark
+    - Can be utilized to handle large datasets in a distributed manner, taking advantage of its built-in features for parallel processing
+
+
+## References
+- https://www.kaggle.com/search
+- https://stackoverflow.com
+- https://chatgpt.com/
