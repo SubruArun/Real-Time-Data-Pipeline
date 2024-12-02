@@ -1,5 +1,4 @@
 import psycopg2
-import logging
 from log_config import log_info
 
 # Database configuration

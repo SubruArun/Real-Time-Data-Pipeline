@@ -77,3 +77,12 @@ query_update_sensor_aggregated_metrics = """
             metadata = EXCLUDED.metadata || sensor_aggregated_metrics.metadata, -- Merging metadata
             last_updated = CURRENT_TIMESTAMP;
     """
+
+query_fetch_sensor_aggregated_metrics = query = """
+            SELECT sensor_id, location_id, latitude, longitude,
+                min_pressure, max_pressure, avg_pressure, std_pressure,
+                min_temperature, max_temperature, avg_temperature, std_temperature,
+                min_humidity, max_humidity, avg_humidity, std_humidity
+            FROM sensor_aggregated_metrics
+            WHERE sensor_id = ANY(%s);
+        """
